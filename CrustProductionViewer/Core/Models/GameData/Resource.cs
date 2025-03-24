@@ -4,8 +4,13 @@
     {
         public int Id { get; set; }
         public string Name { get; set; }
-        public string IconPath { get; set; }
-        public double Amount { get; set; }
-        public double ProductionRate { get; set; } // Ресурсов в минуту
+        public float Quantity { get; set; }
+        public float MaxStorage { get; set; }
+    }
+
+    public class ResourceAmount
+    {
+        public int ResourceId { get; set; }
+        public float Amount { get; set; }
     }
 }

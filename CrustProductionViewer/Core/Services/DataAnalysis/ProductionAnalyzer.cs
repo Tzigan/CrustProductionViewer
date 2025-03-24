@@ -1,170 +1,143 @@
 ﻿using CrustProductionViewer.Core.Models.Analysis;
 using CrustProductionViewer.Core.Models.GameData;
-using System;
+using CrustProductionViewer.Core.Services.DataAnalysis;
+using CrustProductionViewer.Core.Services.MemoryReader;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace CrustProductionViewer.Core.Services.DataAnalysis
 {
     public class ProductionAnalyzer : IProductionAnalyzer
     {
-        public async Task<ProductionAnalysis> AnalyzeCurrentProductionAsync(
-            List<Resource> resources, List<Building> buildings)
+        private readonly IMemoryReader _memoryReader;
+
+        public ProductionAnalyzer(IMemoryReader memoryReader)
         {
-            // TODO: Реализовать реальный анализ
-            await Task.Delay(500); // Имитация сложных вычислений
-
-            var analysis = new ProductionAnalysis
-            {
-                Resources = resources,
-                Buildings = buildings,
-                Timestamp = DateTime.Now
-            };
-
-            // Рассчитываем чистое производство для каждого ресурса
-            foreach (var resource in resources)
-            {
-                double totalProduction = 0;
-                double totalConsumption = 0;
-
-                foreach (var building in buildings)
-                {
-                    // Производство
-                    var output = building.Outputs.FirstOrDefault(o => o.ResourceId == resource.Id);
-                    if (output != null)
-                    {
-                        totalProduction += output.AmountPerMinute * building.Count;
-                    }
-
-                    // Потребление
-                    var input = building.Inputs.FirstOrDefault(i => i.ResourceId == resource.Id);
-                    if (input != null)
-                    {
-                        totalConsumption += input.AmountPerMinute * building.Count;
-                    }
-                }
-
-                // Чистое производство
-                analysis.ResourceNetProduction[resource.Id] = totalProduction - totalConsumption;
-            }
-
-            // Простейшие производственные цепочки
-            // В реальном приложении это будет более сложный алгоритм
-            var productionChains = new List<ProductionChain>();
-            foreach (var resource in resources)
-            {
-                var producers = buildings.Where(b =>
-                    b.Outputs.Any(o => o.ResourceId == resource.Id)).ToList();
-
-                var consumers = buildings.Where(b =>
-                    b.Inputs.Any(i => i.ResourceId == resource.Id)).ToList();
-
-                if (producers.Count > 0 || consumers.Count > 0)
-                {
-                    double totalProduction = producers.Sum(p =>
-                        p.Outputs.First(o => o.ResourceId == resource.Id).AmountPerMinute * p.Count);
-
-                    double totalConsumption = consumers.Sum(c =>
-                        c.Inputs.First(i => i.ResourceId == resource.Id).AmountPerMinute * c.Count);
-
-                    double efficiency = 0;
-                    if (totalProduction > 0 && totalConsumption > 0)
-                    {
-                        efficiency = Math.Min(totalProduction / totalConsumption,
-                                             totalConsumption / totalProduction);
-                    }
-
-                    productionChains.Add(new ProductionChain
-                    {
-                        Producers = producers,
-                        Consumers = consumers,
-                        MainResourceId = resource.Id,
-                        Efficiency = efficiency
-                    });
-                }
-            }
-
-            analysis.ProductionChains = productionChains;
-            return analysis;
+            _memoryReader = memoryReader;
         }
 
-        public async Task<OptimizationRecommendation> GetOptimizationRecommendationsAsync(
-            ProductionAnalysis currentProduction)
+        public Dictionary<int, ResourceFlow> AnalyzeResourceFlows()
         {
-            // TODO: Реализовать реальный алгоритм оптимизации
-            await Task.Delay(800); // Имитация сложных вычислений
+            var resources = _memoryReader.GetResources().ToDictionary(r => r.Id);
+            var productionLines = _memoryReader.GetProductionLines();
 
-            var recommendation = new OptimizationRecommendation
+            var resourceFlows = new Dictionary<int, ResourceFlow>();
+
+            // Создаем объект ResourceFlow для каждого ресурса
+            foreach (var resource in resources.Values)
             {
-                GeneralRecommendations = new List<string>(),
-                RecommendedBuildings = new List<BuildingRecommendation>(),
-                EfficiencyImprovement = 0.15 // Тестовое значение
-            };
-
-            // Примеры рекомендаций на основе тестовых данных
-            foreach (var chain in currentProduction.ProductionChains)
-            {
-                var resourceName = currentProduction.Resources
-                    .FirstOrDefault(r => r.Id == chain.MainResourceId)?.Name ?? "Неизвестный ресурс";
-
-                if (chain.Efficiency < 0.8)
+                resourceFlows[resource.Id] = new ResourceFlow
                 {
-                    if (chain.Producers.Count > 0 && chain.Consumers.Count > 0)
+                    ResourceId = resource.Id,
+                    ResourceName = resource.Name,
+                    CurrentAmount = resource.Quantity,
+                    MaxAmount = resource.MaxStorage,
+                    InputRate = 0,
+                    OutputRate = 0
+                };
+            }
+
+            // Анализируем входящие и исходящие потоки для каждой производственной линии
+            foreach (var line in productionLines)
+            {
+                var building = _memoryReader.GetBuildings().FirstOrDefault(b => b.Id == line.BuildingId);
+                if (building == null) continue;
+
+                float buildingCount = building.Count;
+                float efficiency = line.EfficiencyFactor;
+
+                // Обрабатываем входящие ресурсы (потребление)
+                foreach (var input in line.InputResources)
+                {
+                    if (resourceFlows.ContainsKey(input.ResourceId))
                     {
-                        var totalProduction = chain.Producers.Sum(p =>
-                            p.Outputs.First(o => o.ResourceId == chain.MainResourceId).AmountPerMinute * p.Count);
+                        resourceFlows[input.ResourceId].OutputRate += input.Amount * buildingCount * efficiency;
+                    }
+                }
 
-                        var totalConsumption = chain.Consumers.Sum(c =>
-                            c.Inputs.First(i => i.ResourceId == chain.MainResourceId).AmountPerMinute * c.Count);
-
-                        if (totalProduction < totalConsumption)
-                        {
-                            // Не хватает производства
-                            var mainProducer = chain.Producers[0];
-                            var productionPerBuilding = mainProducer.Outputs
-                                .First(o => o.ResourceId == chain.MainResourceId).AmountPerMinute;
-
-                            var deficit = totalConsumption - totalProduction;
-                            var buildingsNeeded = (int)Math.Ceiling(deficit / productionPerBuilding);
-
-                            recommendation.RecommendedBuildings.Add(new BuildingRecommendation
-                            {
-                                BuildingId = mainProducer.Id,
-                                BuildingName = mainProducer.Name,
-                                RecommendedCount = buildingsNeeded,
-                                Reason = $"Нехватка производства {resourceName} ({deficit:F1}/мин)"
-                            });
-
-                            recommendation.GeneralRecommendations.Add(
-                                $"Добавьте {buildingsNeeded} {mainProducer.Name} для сбалансирования производства {resourceName}");
-                        }
-                        else
-                        {
-                            // Избыток производства
-                            var mainConsumer = chain.Consumers.First();
-                            var consumptionPerBuilding = mainConsumer.Inputs
-                                .First(i => i.ResourceId == chain.MainResourceId).AmountPerMinute;
-
-                            var excess = totalProduction - totalConsumption;
-                            var buildingsNeeded = (int)Math.Ceiling(excess / consumptionPerBuilding);
-
-                            recommendation.RecommendedBuildings.Add(new BuildingRecommendation
-                            {
-                                BuildingId = mainConsumer.Id,
-                                BuildingName = mainConsumer.Name,
-                                RecommendedCount = buildingsNeeded,
-                                Reason = $"Избыток производства {resourceName} ({excess:F1}/мин)"
-                            });
-
-                            recommendation.GeneralRecommendations.Add(
-                                $"Добавьте {buildingsNeeded} {mainConsumer.Name} для использования избытка {resourceName}");
-                        }
+                // Обрабатываем исходящие ресурсы (производство)
+                foreach (var output in line.OutputResources)
+                {
+                    if (resourceFlows.ContainsKey(output.ResourceId))
+                    {
+                        resourceFlows[output.ResourceId].InputRate += output.Amount * buildingCount * efficiency;
                     }
                 }
             }
 
-            return recommendation;
+            return resourceFlows;
+        }
+
+        public List<ProductionNode> BuildProductionNetwork()
+        {
+            var productionLines = _memoryReader.GetProductionLines();
+            var buildings = _memoryReader.GetBuildings().ToDictionary(b => b.Id);
+            var nodes = new List<ProductionNode>();
+
+            foreach (var line in productionLines)
+            {
+                var node = new ProductionNode
+                {
+                    ProductionId = line.Id,
+                    ProductionName = line.Name,
+                    BuildingId = line.BuildingId,
+                    BuildingName = buildings.ContainsKey(line.BuildingId) ? buildings[line.BuildingId].Name : "Неизвестно",
+                    BuildingCount = buildings.ContainsKey(line.BuildingId) ? buildings[line.BuildingId].Count : 0,
+                    Efficiency = line.EfficiencyFactor,
+                    InputResources = line.InputResources.Select(ir => new ResourceNode { ResourceId = ir.ResourceId, Amount = ir.Amount }).ToList(),
+                    OutputResources = line.OutputResources.Select(or => new ResourceNode { ResourceId = or.ResourceId, Amount = or.Amount }).ToList()
+                };
+
+                nodes.Add(node);
+            }
+
+            return nodes;
+        }
+
+        public OptimalBuild CalculateOptimalBuild(int targetResourceId, float desiredRate)
+        {
+            // В заглушке просто возвращаем тестовые данные
+            var resources = _memoryReader.GetResources().ToDictionary(r => r.Id);
+            var buildings = _memoryReader.GetBuildings().ToDictionary(b => b.Id);
+
+            var optimalBuild = new OptimalBuild
+            {
+                TargetResourceId = targetResourceId,
+                TargetResourceName = resources.ContainsKey(targetResourceId) ? resources[targetResourceId].Name : "Неизвестный ресурс",
+                DesiredRate = desiredRate,
+                BuildingRecommendations = new List<BuildingRecommendation>
+                {
+                    new BuildingRecommendation
+                    {
+                        BuildingId = 1,
+                        BuildingName = buildings.ContainsKey(1) ? buildings[1].Name : "Шахта железа",
+                        CurrentCount = buildings.ContainsKey(1) ? buildings[1].Count : 2,
+                        RecommendedCount = 3,
+                        DeltaCount = 1
+                    },
+                    new BuildingRecommendation
+                    {
+                        BuildingId = 2,
+                        BuildingName = buildings.ContainsKey(2) ? buildings[2].Name : "Фабрика металла",
+                        CurrentCount = buildings.ContainsKey(2) ? buildings[2].Count : 1,
+                        RecommendedCount = 2,
+                        DeltaCount = 1
+                    }
+                },
+                BottleneckResources = new List<BottleneckResource>
+                {
+                    new BottleneckResource
+                    {
+                        ResourceId = 1,
+                        ResourceName = "Железо",
+                        CurrentRate = 20,
+                        RequiredRate = 25,
+                        Deficit = 5
+                    }
+                }
+            };
+
+            return optimalBuild;
         }
     }
 }
