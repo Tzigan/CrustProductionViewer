@@ -28,7 +28,7 @@ namespace CrustProductionViewer.UI.ViewModels
         private ProductionAnalysis _currentProduction;
 
         [ObservableProperty]
-        private OptimizationRecommendation _optimizationRecommendation;
+        private BuildingRecommendation _optimizationRecommendation;
 
         [ObservableProperty]
         private bool _isAnalyzing;
