@@ -10,6 +10,9 @@
     <UseWinUI>true</UseWinUI>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="UI\Views\MainPage.xaml" />
+  </ItemGroup>
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
@@ -29,16 +32,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Core\Models\GameData\" />
-    <Folder Include="Core\Models\Analysis\" />
-    <Folder Include="Core\Services\MemoryReader\" />
-    <Folder Include="Core\Services\DataAnalysis\" />
     <Folder Include="Core\Utilities\" />
-    <Folder Include="Infrastructure\DependencyInjection\" />
     <Folder Include="Infrastructure\Configuration\" />
-    <Folder Include="UI\Views\" />
     <Folder Include="UI\Controls\" />
-    <Folder Include="UI\ViewModels\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="UI\Views\MainPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
     <!-- Publish Properties -->
